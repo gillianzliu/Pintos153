@@ -589,8 +589,8 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 //NEW COMPARATOR FUNCTION
 bool cmp_awakeTime (const struct list_elem *a, const struct list_elem *b)
 {
-  struct thread *t = list_entry(a, struct thread, elem);
-  struct thread *p = list_entry(b, struct thread, elem);
+  struct thread *t = list_entry(a, struct thread, sleeping_elem);
+  struct thread *p = list_entry(b, struct thread, sleeping_elem);
   return t->awakeTime < p->awakeTime;
 }
 

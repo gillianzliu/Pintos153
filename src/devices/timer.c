@@ -106,12 +106,12 @@ timer_sleep (int64_t ticks)
   old_state = intr_disable();
 
   //PUT THREAD ON WAITING LIST
-  list_insert_ordered(&sleeping_list, &t->elem,
+  list_insert_ordered(&sleeping_list, &t->sleeping_elem,
     (list_less_func *) &cmp_awakeTime, NULL);
 
   //BLOCK THREAD
   thread_block();
- 
+
   //UNPAUSE INTERUPTS
   intr_set_level(old_state);
 
@@ -198,17 +198,20 @@ timer_interrupt (struct intr_frame *args UNUSED)
   //look through sleeping list
   struct list_elem *e = list_begin(&sleeping_list);
 
-  while(e != list_end(&sleeping_list) )
+  while(e != list_end(&sleeping_list))
   {
-    struct thread *t = list_entry(e, struct thread, elem);
+    struct thread *t = list_entry(e, struct thread, sleeping_elem);
     if (t->awakeTime > ticks)
     {
       break;
+ 
     }
 
-    thread_unblock(list_entry(e, struct thread, elem));
+    thread_unblock(t);
+
     list_pop_front(&sleeping_list);
     e = list_begin(&sleeping_list);
+
   }
   ////if its time to wake up
   //////unblock and take off sleeping list
