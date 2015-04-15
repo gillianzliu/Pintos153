@@ -344,6 +344,12 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+
+  //FIXME list_max and comparison
+  //if (thread_current()->priority < list_max(list*, *less_cmp, void*)->priority)
+  //{
+  //  thread_yield();
+  //}
 }
 
 /* Returns the current thread's priority. */
@@ -497,6 +503,7 @@ next_thread_to_run (void)
     return idle_thread;
   else
     return list_entry (list_pop_front (&ready_list), struct thread, elem);
+    //FIND AND RETURN MAX_PRIORITY(THREAD_GET_PRIORITY) ON READY LIST
 }
 
 /* Completes a thread switch by activating the new thread's page

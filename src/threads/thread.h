@@ -97,6 +97,10 @@ struct thread
     /*For sleeping_list*/
     struct list_elem sleeping_elem;
 
+    /*FIXME ADD DONOR LIST*/
+    //struct list donors
+    //sturct list_elem donor_elem
+    
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */

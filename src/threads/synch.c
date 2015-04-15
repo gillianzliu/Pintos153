@@ -196,6 +196,8 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+  //CHECK IF PRIORITY IS HIGHER THAN WHAT HAS THE LOCK
+  //DONATE IF IT IS ADD TO DONATING LIST
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
 }
@@ -214,6 +216,7 @@ lock_try_acquire (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (!lock_held_by_current_thread (lock));
 
+  //DO THE SAME CHANGES AS LOCK_ACQUIRE
   success = sema_try_down (&lock->semaphore);
   if (success)
     lock->holder = thread_current ();
@@ -231,6 +234,7 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+  //ON RELEASE IF THERE WAS DONATION, REVERT PRIORITY BACK
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }
