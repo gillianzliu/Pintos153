@@ -112,19 +112,21 @@ sema_up (struct semaphore *sema)
 
   ASSERT (sema != NULL);
 
-  //MAKE SURE TO RETURN MAX PRIORITY
+  //FIXME MAKE SURE TO RETURN MAX PRIORITY
   old_level = intr_disable ();
 
   if (!list_empty (&sema->waiters))
   { 
     struct list_elem *e = list_max (&sema->waiters, cmp_priority, NULL);
     struct thread *t = list_entry (e, struct thread, elem);
-    list_remove(&t->elem);
+    list_remove(e);
     thread_unblock (t);
   }
 
   sema->value++;
   intr_set_level (old_level);
+  //FIXME THIS IS EVIDENCE THAT UNBLOCK NEEDS THREAD YIELD
+  //thread_yield();
 }
 
 static void sema_test_helper (void *sema_);
@@ -257,15 +259,27 @@ lock_release (struct lock *lock)
 
   //FIXME ON RELEASE IF THERE WAS DONATION, REVERT PRIORITY BACK
   struct list_elem *e;
+  //sort lists
+  list_sort (&(lock->semaphore).waiters, cmp_address, NULL);
+  list_sort (&thread_current()->donors, cmp_address, NULL);
+
+  struct list_elem *f = list_begin(&thread_current()->donors);
+
   for (e = list_begin(&(lock->semaphore).waiters); 
        e != list_end(&(lock->semaphore).waiters); e = list_next(e))
   {
     struct thread *t = list_entry(e, struct thread, elem);
-    list_remove (&t->donor_elem);
+    while (t != list_entry(f, struct thread, donor_elem))
+    {
+      f = list_next(f);
+    }
+    list_remove (f);
   }
 
   lock->holder = NULL;
   sema_up (&lock->semaphore);
+  
+  //thread_yield();
 }
 
 /* Returns true if the current thread holds LOCK, false

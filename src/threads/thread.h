@@ -146,8 +146,10 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-bool cmp_awakeTime(const struct list_elem *a, const struct list_elem *b);
-bool cmp_priority(const struct list_elem *a, const struct list_elem *b);
+bool cmp_awakeTime(const struct list_elem *a, const struct list_elem *b, void* aux);
+bool cmp_priority(const struct list_elem *a, const struct list_elem *b, void* aux);
+bool cmp_address(const struct list_elem *a, const struct list_elem *b, void* aux);
+
 int thread_get_effective_priority(struct thread *t, int depth);
 
 #endif /* threads/thread.h */
