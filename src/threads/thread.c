@@ -248,6 +248,12 @@ thread_unblock (struct thread *t)
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
+  
+  //FIXME IF UNBLOCKED THREAD HAS HIGHER PRIORITY YIELD
+  if (thread_get_effective_priority(t, 8) > thread_get_priority())
+  {
+     thread_yield();
+  }
 }
 
 /* Returns the name of the running thread. */
@@ -343,20 +349,22 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  (thread_current())->priority = new_priority;
 
   //FIXME list_max and comparison
-  //if (thread_current()->priority < list_max(list*, *less_cmp, void*)->priority)
-  //{
-  //  thread_yield();
-  //}
+  if (thread_get_priority() < list_entry(list_max(&ready_list, 
+           cmp_priority, NULL), struct thread, elem)->priority)
+  {
+    thread_yield();
+  }
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority;
+  return thread_get_effective_priority(thread_current(), 8);
+  //return thread_current ()->priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -476,6 +484,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
+
+  //FIXME ADD INITIALIZATION FOR DONOR LIST
+  list_init(&t->donors);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
@@ -502,8 +513,15 @@ next_thread_to_run (void)
   if (list_empty (&ready_list))
     return idle_thread;
   else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+  {
+    //return list_entry (list_pop_front (&ready_list), struct thread, elem);
     //FIND AND RETURN MAX_PRIORITY(THREAD_GET_PRIORITY) ON READY LIST
+    
+    struct thread *t = list_entry(list_max(&ready_list, cmp_priority, NULL),
+                                  struct thread, elem); 
+    list_remove(&t->elem);
+    return t;
+  }
 }
 
 /* Completes a thread switch by activating the new thread's page
@@ -600,4 +618,37 @@ bool cmp_awakeTime (const struct list_elem *a, const struct list_elem *b)
   struct thread *p = list_entry(b, struct thread, sleeping_elem);
   return t->awakeTime < p->awakeTime;
 }
+
+bool cmp_priority(const struct list_elem *a, const struct list_elem *b)
+{
+  struct thread *t = list_entry(a, struct thread, elem);
+  struct thread *p = list_entry(b, struct thread, elem);
+  return thread_get_effective_priority(t, 8) < 
+          thread_get_effective_priority(p, 8);
+}
+
+/*Gets priority */
+int thread_get_effective_priority(struct thread *t, int depth)
+{
+  if (depth <= 0)
+  {
+    return t->priority;
+  }
+  struct list_elem *e = list_begin(&t->donors);
+  int max = t->priority;
+  for (; e != list_end(&t->donors);
+       e = list_next(e))
+  {
+    struct thread *d = list_entry(e, struct thread, donor_elem); 
+    int donor_i = thread_get_effective_priority(d, depth - 1);
+    if (max < donor_i)
+    {
+       max = donor_i;
+    }
+  }
+
+  return max;
+}
+
+
 

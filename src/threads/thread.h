@@ -98,8 +98,8 @@ struct thread
     struct list_elem sleeping_elem;
 
     /*FIXME ADD DONOR LIST*/
-    //struct list donors
-    //sturct list_elem donor_elem
+    struct list donors;
+    struct list_elem donor_elem;
     
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -147,5 +147,7 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 bool cmp_awakeTime(const struct list_elem *a, const struct list_elem *b);
+bool cmp_priority(const struct list_elem *a, const struct list_elem *b);
+int thread_get_effective_priority(struct thread *t, int depth);
 
 #endif /* threads/thread.h */

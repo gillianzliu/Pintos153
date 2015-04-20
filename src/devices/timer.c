@@ -24,7 +24,13 @@ static int64_t ticks;
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
 
+/* List of current threads asleep, 
+   in increasing order of awake time */
 static struct list sleeping_list;
+
+/* Lock for writing to sleeping_list
+   to ensure there is no corruption of data */
+static struct lock sleep_lock;  
 
 static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
@@ -38,6 +44,7 @@ void
 timer_init (void) 
 {
   list_init(&sleeping_list);
+  lock_init(&sleep_lock);
 
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
@@ -105,9 +112,16 @@ timer_sleep (int64_t ticks)
   enum intr_level old_state;
   old_state = intr_disable();
 
+  //AQUIRE LOCK SO ONLY ONE THREAD CAN CHANGE LIST
+  //AT ONE TIME
+  lock_acquire(&sleep_lock);
+
   //PUT THREAD ON WAITING LIST
   list_insert_ordered(&sleeping_list, &t->sleeping_elem,
     (list_less_func *) &cmp_awakeTime, NULL);
+
+  //RELEASE LOCK NOW THAT SENSITIVE ACTION IS DONE
+  lock_release(&sleep_lock);
 
   //BLOCK THREAD
   thread_block();
