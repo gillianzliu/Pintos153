@@ -247,13 +247,21 @@ thread_unblock (struct thread *t)
   ASSERT (t->status == THREAD_BLOCKED);
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
-  intr_set_level (old_level);
   
   //FIXME IF UNBLOCKED THREAD HAS HIGHER PRIORITY YIELD
-  if (thread_get_effective_priority(t, 8) > thread_get_priority())
+  //THIS HANGS WITH THE thread_yield FOR SOME REASON
+  if (thread_get_priority() < list_entry(list_max(&ready_list, 
+           cmp_priority, NULL), struct thread, elem)->priority)
   {
-     thread_yield();
+    if (intr_context())
+    {
+        intr_yield_on_return();
+    }
+    
+    thread_yield();
   }
+  
+  intr_set_level (old_level);
 }
 
 /* Returns the name of the running thread. */
