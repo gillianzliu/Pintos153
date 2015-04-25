@@ -210,6 +210,11 @@ timer_interrupt (struct intr_frame *args UNUSED)
   ticks++;
   thread_tick ();
   //look through sleeping list
+  if (thread_mlfqs && ticks % TIMER_FREQ == 0)
+  {
+    update_load_avg();
+  }
+
   struct list_elem *e = list_begin(&sleeping_list);
 
   while(e != list_end(&sleeping_list))

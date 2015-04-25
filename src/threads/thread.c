@@ -136,28 +136,7 @@ thread_tick (void)
 
   if (thread_mlfqs)
   {
-    struct list_elem *x = list_begin(&all_list);
-    int threads_ready = 0;
-    
-    while (x != list_end(&all_list))
-    {
-      struct thread *p = list_entry(x, struct thread, allelem);
-      if (p->status == THREAD_RUNNING || p->status == THREAD_READY)
-      {
-        threads_ready++;
-      }
-      x = list_next(x);
-    }
-
-    //JUST FOR TESTING PURPOSES
-    //load_avg = threads_ready;
-
-    int64_t i = 60;
-    int64_t j = 59;
-    int64_t k = 1;
-
-    load_avg = load_avg + 1;
-    //(((int64_t)((j<<14)/(i<<14)))*load_avg) + ((k<<14/i<<14)*threads_ready);
+   //FIXME 
   }
 
   /* Enforce preemption. */
@@ -264,6 +243,7 @@ thread_block (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   thread_current ()->status = THREAD_BLOCKED;
+
   schedule ();
 }
 
@@ -724,5 +704,33 @@ int thread_get_effective_priority(struct thread *t, int depth)
   return max;
 }
 
+void
+update_load_avg()
+{
+  struct list_elem *x = list_begin(&all_list);
+  int threads_ready = 0;
+  
+  while (x != list_end(&all_list))
+  {
+    struct thread *p = list_entry(x, struct thread, allelem);
+    if (p->status == THREAD_RUNNING || p->status == THREAD_READY)
+    {
+      threads_ready++;
+    }
+    x = list_next(x);
+  } 
 
+  int64_t j = 59;
+  j = j << 14;
+  j = j / 60;
+  int64_t k = 1;
+  k = k << 14;
+
+  j = (j * load_avg) >> 14;
+
+  k = k / 60;
+  k = k * threads_ready;
+
+  load_avg = j + k;
+}  
 
