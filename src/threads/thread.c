@@ -134,6 +134,32 @@ thread_tick (void)
   else
     kernel_ticks++;
 
+  if (thread_mlfqs)
+  {
+    struct list_elem *x = list_begin(&all_list);
+    int threads_ready = 0;
+    
+    while (x != list_end(&all_list))
+    {
+      struct thread *p = list_entry(x, struct thread, allelem);
+      if (p->status == THREAD_RUNNING || p->status == THREAD_READY)
+      {
+        threads_ready++;
+      }
+      x = list_next(x);
+    }
+
+    //JUST FOR TESTING PURPOSES
+    //load_avg = threads_ready;
+
+    int64_t i = 60;
+    int64_t j = 59;
+    int64_t k = 1;
+
+    load_avg = load_avg + 1;
+    //(((int64_t)((j<<14)/(i<<14)))*load_avg) + ((k<<14/i<<14)*threads_ready);
+  }
+
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
@@ -181,6 +207,11 @@ thread_create (const char *name, int priority,
     return TID_ERROR;
 
   /* Initialize thread. */
+  if (thread_mlfqs)
+  {
+    priority = 0;
+  }
+
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
 
@@ -205,6 +236,12 @@ thread_create (const char *name, int priority,
   sf->ebp = 0;
 
   intr_set_level (old_level);
+
+  if(thread_mlfqs)
+  {
+    t->nice = thread_current()->nice;
+    t->recent_cpu = thread_current()->recent_cpu;
+  }
 
   /* Add to run queue. */
   thread_unblock (t);
@@ -356,7 +393,25 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  (thread_current())->priority = new_priority;
+  //FIXME TO MATCH FLOAT INTEGER AND WHAT NOT
+  if(thread_mlfqs)
+  {
+    thread_current()->priority = PRI_MAX - (thread_current()->recent_cpu/4)
+                                  - (thread_current()->nice*2);
+  
+    if (thread_current()->priority > PRI_MAX)
+    {
+      thread_current()->priority = PRI_MAX;
+    }
+    else if (thread_current()->priority < PRI_MIN)
+    {
+      thread_current()->priority = PRI_MIN;
+    }
+  }
+  else 
+  {
+    (thread_current())->priority = new_priority;
+  }
 
   //FIXME list_max and comparison
   //if (thread_get_priority() < thread_get_effective_priority(list_entry(list_max(&ready_list, 
@@ -370,6 +425,10 @@ thread_set_priority (int new_priority)
 int
 thread_get_priority (void) 
 {
+  if (thread_mlfqs)
+  {
+    return thread_current()->priority;
+  }
   return thread_get_effective_priority(thread_current(), 8);
   //return thread_current ()->priority;
 }
@@ -378,6 +437,8 @@ thread_get_priority (void)
 void
 thread_set_nice (int nice UNUSED) 
 {
+  thread_current()->nice = nice;
+  thread_set_priority(0);
   /* Not yet implemented. */
 }
 
@@ -386,7 +447,7 @@ int
 thread_get_nice (void) 
 {
   /* Not yet implemented. */
-  return 0;
+  return thread_current()->nice;
 }
 
 /* Returns 100 times the system load average. */
@@ -394,7 +455,7 @@ int
 thread_get_load_avg (void) 
 {
   /* Not yet implemented. */
-  return 0;
+  return (100*load_avg)>>14;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
@@ -402,7 +463,7 @@ int
 thread_get_recent_cpu (void) 
 {
   /* Not yet implemented. */
-  return 0;
+  return 100*thread_current()->recent_cpu;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.

@@ -88,6 +88,8 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+    int nice;                           /* For advanced scheduler niceness */
+    int64_t recent_cpu;                 /* Again for the advanced scheduler, how much cpu time */
     int64_t awakeTime;			/* If sleeping, time needed to be woken */
     struct list_elem allelem;           /* List element for all threads list. */
 
@@ -114,6 +116,7 @@ struct thread
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+static int64_t load_avg;
 
 void thread_init (void);
 void thread_start (void);
