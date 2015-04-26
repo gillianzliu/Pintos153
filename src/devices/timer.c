@@ -114,14 +114,14 @@ timer_sleep (int64_t ticks)
 
   //AQUIRE LOCK SO ONLY ONE THREAD CAN CHANGE LIST
   //AT ONE TIME
-  lock_acquire(&sleep_lock);
+  //lock_acquire(&sleep_lock);
 
   //PUT THREAD ON WAITING LIST
   list_insert_ordered(&sleeping_list, &t->sleeping_elem,
     (list_less_func *) &cmp_awakeTime, NULL);
 
   //RELEASE LOCK NOW THAT SENSITIVE ACTION IS DONE
-  lock_release(&sleep_lock);
+  //lock_release(&sleep_lock);
 
   //BLOCK THREAD
   thread_block();
