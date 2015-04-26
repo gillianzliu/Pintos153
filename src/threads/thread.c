@@ -99,7 +99,7 @@ thread_init (void)
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
 
-  threads_ready = 1;
+  //threads_ready = 1;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -249,10 +249,10 @@ thread_block (void)
   //FIXME I CAUSE AN UNDEFINED VALUE FOR threads_ready
   //threads_ready = threads_ready - 1;
 
-  if (threads_ready > 0)
-  {
-    threads_ready--;
-  }
+  //if (threads_ready > 0)
+  //{
+    //threads_ready--;
+  //}
 
   schedule ();
 }
@@ -285,7 +285,7 @@ thread_unblock (struct thread *t)
   //    thread_yield();
   //}
 
-  threads_ready = threads_ready + 1;
+  //threads_ready = threads_ready + 1;
 
   intr_set_level (old_level);
 
@@ -652,8 +652,6 @@ schedule (void)
   if (cur != next)
   {
     prev = switch_threads (cur, next);
-    
-    
   }
   thread_schedule_tail (prev);
 }
@@ -725,9 +723,9 @@ void
 update_load_avg()
 {
   struct list_elem *x = list_begin(&all_list);
-  //int threads_ready = 0;
+  int threads_ready = 0;
   
-  /*while (x != list_end(&all_list))
+  while (x != list_end(&all_list))
   {
     struct thread *p = list_entry(x, struct thread, allelem);
     if (p->status == THREAD_RUNNING || p->status == THREAD_READY)
@@ -735,7 +733,7 @@ update_load_avg()
       threads_ready++;
     }
     x = list_next(x);
-  }*/ 
+  } 
 
   int64_t j = 59;
   j = j << 14;
