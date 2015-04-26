@@ -210,11 +210,6 @@ timer_interrupt (struct intr_frame *args UNUSED)
   ticks++;
   thread_tick ();
   //look through sleeping list
-  if (thread_mlfqs && ticks % TIMER_FREQ == 0)
-  {
-    update_load_avg();
-  }
-
   struct list_elem *e = list_begin(&sleeping_list);
 
   while(e != list_end(&sleeping_list))
@@ -223,17 +218,21 @@ timer_interrupt (struct intr_frame *args UNUSED)
     if (t->awakeTime > ticks)
     {
       break;
- 
     }
 
     thread_unblock(t);
 
-    list_pop_front(&sleeping_list);
+    list_remove(e);
     e = list_begin(&sleeping_list);
 
   }
   ////if its time to wake up
   //////unblock and take off sleeping list
+
+  if (thread_mlfqs && ticks % TIMER_FREQ == 0)
+  {
+    update_load_avg();
+  }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
