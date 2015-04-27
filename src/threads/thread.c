@@ -270,19 +270,7 @@ thread_unblock (struct thread *t)
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   
-  //FIXME IF UNBLOCKED THREAD HAS HIGHER PRIORITY YIELD
-  //THIS HANGS WITH THE thread_yield FOR SOME REASON
-  //if (thread_get_priority() < thread_get_effective_priority(list_entry(list_max(&ready_list, 
-  //         cmp_priority, NULL), struct thread, elem), 8))
-  //{
-  //    thread_yield();
-  //}
-
-  //threads_ready = threads_ready + 1;
-
   intr_set_level (old_level);
-
-  //intr_yield_on_return();
 }
 
 /* Returns the name of the running thread. */
@@ -379,16 +367,11 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  //FIXME TO MATCH FLOAT INTEGER AND WHAT NOT
   if(!thread_mlfqs)
   {
     (thread_current())->priority = new_priority;
     thread_yield();
   }
-
-  //FIXME list_max and comparison
-  //if (thread_get_priority() < thread_get_effective_priority(list_entry(list_max(&ready_list, 
-  //         cmp_priority, NULL), struct thread, elem), 8))
 }
 
 /* Returns the current thread's priority. */
@@ -521,7 +504,6 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
 
-  //FIXME ADD INITIALIZATION FOR DONOR LIST
   list_init(&t->donors);
 }
 
