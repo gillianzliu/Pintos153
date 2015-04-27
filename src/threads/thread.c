@@ -706,7 +706,6 @@ int thread_get_effective_priority(struct thread *t, int depth)
 void
 update_load_avg()
 {
-  struct list_elem *x = list_begin(&all_list);
   int threads_ready = list_size(&ready_list);
   
   if (thread_current() != idle_thread)
