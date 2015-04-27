@@ -210,9 +210,24 @@ timer_interrupt (struct intr_frame *args UNUSED)
   ticks++;
   thread_tick ();
 
-  if (thread_mlfqs && ticks % TIMER_FREQ == 0)
+  //if (thread_mlfqs)
   {
-    update_load_avg();
+    if (thread_mlfqs && ticks % TIMER_FREQ == 0)
+    {
+      update_load_avg();
+      /*if (ticks % 4 == 0)
+      {
+        thread_foreach(update_recent_priority, NULL);
+      }
+      else
+      {
+        thread_foreach(update_recent_cpu, NULL);
+      }*/
+    }
+    else if (ticks % 4 == 0)
+    {
+      //thread_foreach(update_priority, NULL);
+    }
   }
  
   //look through sleeping list

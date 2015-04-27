@@ -136,9 +136,9 @@ thread_tick (void)
   else
     kernel_ticks++;
 
-  if (thread_mlfqs)
+  if (thread_mlfqs && thread_current() != idle_thread)
   {
-   //FIXME 
+    thread_current()->recent_cpu++;
   }
 
   /* Enforce preemption. */
@@ -387,31 +387,15 @@ void
 thread_set_priority (int new_priority) 
 {
   //FIXME TO MATCH FLOAT INTEGER AND WHAT NOT
-  if(thread_mlfqs)
-  {
-    thread_current()->priority = PRI_MAX - (thread_current()->recent_cpu/4)
-                                  - (thread_current()->nice*2);
-  
-    if (thread_current()->priority > PRI_MAX)
-    {
-      thread_current()->priority = PRI_MAX;
-    }
-    else if (thread_current()->priority < PRI_MIN)
-    {
-      thread_current()->priority = PRI_MIN;
-    }
-  }
-  else 
+  if(!thread_mlfqs)
   {
     (thread_current())->priority = new_priority;
+    thread_yield();
   }
 
   //FIXME list_max and comparison
   //if (thread_get_priority() < thread_get_effective_priority(list_entry(list_max(&ready_list, 
   //         cmp_priority, NULL), struct thread, elem), 8))
-  {
-    thread_yield();
-  }
 }
 
 /* Returns the current thread's priority. */
@@ -431,7 +415,7 @@ void
 thread_set_nice (int nice UNUSED) 
 {
   thread_current()->nice = nice;
-  thread_set_priority(0);
+  update_priority(thread_current(), NULL);
   /* Not yet implemented. */
 }
 
@@ -723,18 +707,13 @@ void
 update_load_avg()
 {
   struct list_elem *x = list_begin(&all_list);
-  int threads_ready = 0;
+  int threads_ready = list_size(&ready_list);
   
-  while (x != list_end(&all_list))
+  if (thread_current() != idle_thread)
   {
-    struct thread *p = list_entry(x, struct thread, allelem);
-    if (p->status == THREAD_RUNNING || p->status == THREAD_READY)
-    {
-      threads_ready++;
-    }
-    x = list_next(x);
-  } 
-
+    threads_ready++;
+  }
+  
   int64_t j = 59;
   j = j << 14;
   j = j / 60;
@@ -748,4 +727,40 @@ update_load_avg()
 
   load_avg = j + k; 
 }  
+
+void
+update_recent_cpu(struct thread *t, void *aux)
+{
+  int64_t i = (2*load_avg);
+  i = (i<<14)/(i + (1<<14));
+  i = (i * (t->recent_cpu))>>14;
+  t->recent_cpu = i + t->nice;
+}
+
+void
+update_priority(struct thread *t, void *aux)
+{
+  int64_t i = (PRI_MAX<<14) - (t->recent_cpu/4)
+               - (t->nice*2);
+
+  t->priority = (i + (1<<14)/2)>>14;
+
+  if (t->priority > PRI_MAX)
+  {
+    t->priority = PRI_MAX;
+  }
+  else if (t->priority < PRI_MIN)
+  {
+    t->priority = PRI_MIN;
+  }
+}
+
+void
+update_recent_priority(struct thread *t, void* aux)
+{
+  update_recent_cpu(t, NULL);
+  update_priority(t, NULL);
+}
+
+
 

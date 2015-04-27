@@ -157,5 +157,8 @@ bool cmp_address(const struct list_elem *a, const struct list_elem *b, void* aux
 int thread_get_effective_priority(struct thread *t, int depth);
 
 void update_load_avg();
+void update_recent_cpu(struct thread *t, void *aux);
+void update_priority(struct thread *t, void *aux);
+void update_recent_priority(struct thread *t, void *aux);
 
 #endif /* threads/thread.h */
