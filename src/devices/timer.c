@@ -249,8 +249,8 @@ timer_interrupt (struct intr_frame *args UNUSED)
   }
   ////if its time to wake up
   //////unblock and take off sleeping list
-
   
+  thread_mlfqs_yield();
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

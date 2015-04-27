@@ -138,7 +138,7 @@ thread_tick (void)
 
   if (thread_mlfqs && thread_current() != idle_thread)
   {
-    thread_current()->recent_cpu++;
+    thread_current()->recent_cpu = thread_current()->recent_cpu + (1<<14);
   }
 
   /* Enforce preemption. */
@@ -246,14 +246,6 @@ thread_block (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   thread_current ()->status = THREAD_BLOCKED;
-
-  //FIXME I CAUSE AN UNDEFINED VALUE FOR threads_ready
-  //threads_ready = threads_ready - 1;
-
-  //if (threads_ready > 0)
-  //{
-    //threads_ready--;
-  //}
 
   schedule ();
 }
@@ -439,7 +431,7 @@ thread_get_load_avg (void)
 int
 thread_get_recent_cpu (void) 
 {
-  return 100*thread_current()->recent_cpu;
+  return (100*thread_current()->recent_cpu)>>14;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -732,7 +724,7 @@ update_recent_cpu(struct thread *t, void *aux)
   int64_t i = (2*load_avg);
   i = (i<<14)/(i + (1<<14));
   i = (i * (t->recent_cpu))>>14;
-  t->recent_cpu = i + t->nice;
+  t->recent_cpu = i + ((t->nice)<<14);
 }
 
 void
@@ -741,9 +733,9 @@ update_priority(struct thread *t, void *aux)
   int64_t i = PRI_MAX;
   i = i<<14;
   i = i - (t->recent_cpu/4);
-  i = i - (t->nice*2);
+  i = i - ((t->nice*2)<<14);
 
-  t->priority = (i)>>14;
+  t->priority = (i>>14);
 
   if (t->priority > PRI_MAX)
   {
@@ -761,6 +753,30 @@ update_recent_priority(struct thread *t, void* aux)
   update_recent_cpu(t, NULL);
   update_priority(t, NULL);
 }
+
+void
+thread_mlfqs_yield()
+{
+  if (list_empty(&ready_list))
+  {
+    return;
+  }
+  struct thread *t = list_entry(list_max(&ready_list, cmp_priority, NULL), 
+                                struct thread, elem);
+  if (intr_context())
+  {
+    thread_ticks++;
+    if (thread_current()->priority < t->priority || (thread_ticks >= TIME_SLICE
+        && thread_current()->priority == t->priority))
+    {
+      intr_yield_on_return();
+    }
+  }
+}
+
+
+
+
 
 
 
