@@ -210,23 +210,23 @@ timer_interrupt (struct intr_frame *args UNUSED)
   ticks++;
   thread_tick ();
 
-  //if (thread_mlfqs)
+  if (thread_mlfqs)
   {
-    if (thread_mlfqs && ticks % TIMER_FREQ == 0)
+    if (ticks % TIMER_FREQ == 0)
     {
       update_load_avg();
-      /*if (ticks % 4 == 0)
+      if (ticks % 4 == 0)
       {
         thread_foreach(update_recent_priority, NULL);
       }
       else
       {
         thread_foreach(update_recent_cpu, NULL);
-      }*/
+      }
     }
     else if (ticks % 4 == 0)
     {
-      //thread_foreach(update_priority, NULL);
+      thread_foreach(update_priority, NULL);
     }
   }
  
@@ -249,6 +249,8 @@ timer_interrupt (struct intr_frame *args UNUSED)
   }
   ////if its time to wake up
   //////unblock and take off sleeping list
+
+  
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

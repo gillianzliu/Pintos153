@@ -117,7 +117,6 @@ struct thread
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
 static int64_t load_avg;
-//static int threads_ready;
 
 void thread_init (void);
 void thread_start (void);

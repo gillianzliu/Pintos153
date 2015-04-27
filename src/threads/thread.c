@@ -99,7 +99,7 @@ thread_init (void)
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
 
-  //threads_ready = 1;
+  load_avg = 0;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -222,6 +222,7 @@ thread_create (const char *name, int priority,
   {
     t->nice = thread_current()->nice;
     t->recent_cpu = thread_current()->recent_cpu;
+    update_priority(t, NULL);
   }
 
   /* Add to run queue. */
@@ -412,18 +413,18 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice (int nice /*UNUSED*/) 
 {
   thread_current()->nice = nice;
   update_priority(thread_current(), NULL);
-  /* Not yet implemented. */
+  
+  thread_yield();
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
   return thread_current()->nice;
 }
 
@@ -431,7 +432,6 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
   return (100*load_avg)>>14;
 }
 
@@ -439,7 +439,6 @@ thread_get_load_avg (void)
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
   return 100*thread_current()->recent_cpu;
 }
 
@@ -739,10 +738,12 @@ update_recent_cpu(struct thread *t, void *aux)
 void
 update_priority(struct thread *t, void *aux)
 {
-  int64_t i = (PRI_MAX<<14) - (t->recent_cpu/4)
-               - (t->nice*2);
+  int64_t i = PRI_MAX;
+  i = i<<14;
+  i = i - (t->recent_cpu/4);
+  i = i - (t->nice*2);
 
-  t->priority = (i + (1<<14)/2)>>14;
+  t->priority = (i)>>14;
 
   if (t->priority > PRI_MAX)
   {
