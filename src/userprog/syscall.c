@@ -15,6 +15,8 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
+  //FIXME CHECK TO SEE IF POINTER IS VALID
+  //THEN GET SYSCALL NUMBER 
   printf ("system call!\n");
   thread_exit ();
 }

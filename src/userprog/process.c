@@ -38,6 +38,9 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  //FIXME PARSE SO THAT file_name is just the first command, no parameters
+  //fn_copy should contain all parameters
+
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
@@ -60,6 +63,7 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
+  //FIXME THE &if_.esp what is it, it should be the arguments passed in
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -429,6 +433,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack (void **esp) 
 {
+  //FIXME FUNCTION TO INITIALIZE ARGUMENTS IN STACK
+  //PROBABLY NEEDS ANOTHER PARAMETER FOR ARGUMENTS
   uint8_t *kpage;
   bool success = false;
 
@@ -437,7 +443,7 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE;
+        *esp = PHYS_BASE; //FIXME LOOP TO ADD ARGUMENTS TO STACK IN REVERSE ORDER
       else
         palloc_free_page (kpage);
     }
