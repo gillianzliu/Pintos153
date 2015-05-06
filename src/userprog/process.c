@@ -21,6 +21,14 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+//FIXME ADDED STRUCT TO HELP START PROCESS
+struct exec_helper
+{
+  const char *file_name; //entire command line
+  //add semaphore for loading
+  //add stuff that is needed to transfer between processes and children
+};
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -28,22 +36,42 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy;
+  struct exec_helper exec;
+  char thread_name[16];
+  //char *fn_copy;
   tid_t tid;
+  char *saveptr;
+
+  //FIXME SET file_name in exec_helper
+  //init(&(exec.semaphore));
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0);
+  /* fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+  strlcpy (fn_copy, file_name, PGSIZE); */
 
   //FIXME PARSE SO THAT file_name is just the first command, no parameters
   //fn_copy should contain all parameters
 
+  strlcpy(thread_name, strtok_r(file_name, ' ', saveptr), 16);
+
+  if (saveptr != NULL)
+  {
+    *(saveptr - 1) = ' ';
+  }
+
+  exec.file_name = file_name;
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
+  tid = thread_create (thread_name, PRI_DEFAULT, start_process, &exec);
+  if (tid != TID_ERROR)
+  {
+    //sema_down(&(exec.semaphore));
+    //list_pushback(thread_current()->children_list, tid?);
+  }
+  else
     palloc_free_page (fn_copy); 
   return tid;
 }
@@ -92,6 +120,7 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  //FIXME MAKE LIST OF CHILDREN IN THREADS.H
   return -1;
 }
 
@@ -210,13 +239,15 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (const char *file_name, void (**eip) (void), void **esp) 
+load (const char *cmd_line, void (**eip) (void), void **esp) 
 {
   struct thread *t = thread_current ();
+  char file_name[NAME_MAX + 2];           //DIFFERENT THAN BEFORE
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
   off_t file_ofs;
   bool success = false;
+  char *saveptr;
   int i;
 
   /* Allocate and activate page directory. */
@@ -225,6 +256,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
+  //FIXME
+  file_name = strtok_r(cmd_line, ' ', saveptr);
+  camd_line = saveptr;
+
   /* Open executable file. */
   file = filesys_open (file_name);
   if (file == NULL) 
@@ -232,6 +267,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
+
+  thread_current()->bin = file;            //ADDED FOR PROCESS_EXIT
+
+  //DISABLE 'file' WRITE 
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -306,7 +345,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp))
+  if (!setup_stack (esp, cmd_line))
     goto done;
 
   /* Start address. */
@@ -316,7 +355,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
+  //file_close (file); DO THIS IN PROCESS_EXIT
   return success;
 }
 
@@ -431,23 +470,61 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
-setup_stack (void **esp) 
+setup_stack (void **esp, char *cmd_line) 
 {
   //FIXME FUNCTION TO INITIALIZE ARGUMENTS IN STACK
-  //PROBABLY NEEDS ANOTHER PARAMETER FOR ARGUMENTS
+  //PROBABLY NEEDS ANOTHER PARAMETER FOR ARGUMENTS: just added cmd_line
   uint8_t *kpage;
   bool success = false;
 
   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   if (kpage != NULL) 
     {
-      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
+      uint8_t *upage = ((uint8_t*) PHYS_BASE) - PGSIZE;
+      success = install_page (upage, kpage, true);
       if (success)
-        *esp = PHYS_BASE; //FIXME LOOP TO ADD ARGUMENTS TO STACK IN REVERSE ORDER
+        //*esp = PHYS_BASE; //FIXME LOOP TO ADD ARGUMENTS TO STACK IN REVERSE ORDER
+        success = setup_stack_helper(cmd_line, kpage, upage, esp);
       else
         palloc_free_page (kpage);
     }
   return success;
+}
+
+static bool
+setup_stack_helper(char *cmd_line, uint8_t *kpage, uint8_t *upage, void **esp)
+{
+  size_t ofs = PGSIZE;
+  char * const null = NULL;
+  char *saveptr;
+  //char ** argv;
+  //int argc;
+  //MAYBE MORE STUFF
+ //for loop end when NULL
+  argv[argc] = strtok_r(cmd_line, ' ', saveptr);
+  argc++;
+
+//for loop decrement argc FIXME CHECK IF ANY PUSH RETURNS NULL
+  push(kpage, &upage, argv[argc], length(argv[argc]) + 1);
+
+  push(NULL);
+  
+//for loop same as above
+  push(kpage, &upage, &argv[argc], size_of (CHAR *));
+
+  push(argc);
+
+  push(&null);
+
+  //use push(), push token and then a NULL
+  //if any push() returns false, return false
+  //
+  //push argc addresses in reverse order
+  //push NULL
+
+  *esp = upage + ofs;
+
+  return true;
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel

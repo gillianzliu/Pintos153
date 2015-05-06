@@ -102,6 +102,10 @@ struct thread
     /*FIXME ADD DONOR LIST*/
     struct list donors;
     struct list_elem donor_elem;
+
+    /* ADD CHILDREN LIST */
+    struct list children;
+    struct list_elem children_elem; 
     
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -110,6 +114,9 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+
+    /* ADDED FOR PROCESS_EXIT AND LOAD */
+    struct file *bin;
   };
 
 /* If false (default), use round-robin scheduler.
