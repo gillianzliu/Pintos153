@@ -27,6 +27,14 @@ syscall_handler (struct intr_frame *f UNUSED)
   //
   copy_in (args, (uint32_t *) f->esp + 1, sizeof *args * numOfArgs);
 
+  case SYS_WRITE:
+  {
+    get_arg(f , &arg[0], 3);
+    check_valid_buffer((void *) arg[1], (unsigned) arg[2]);
+    arg[1] = user_to_kernel_ptr((const void *) arg[1]);
+    f->eax = write(arg[0], (const void *) arg[1], (unsigned) arg[2]);
+    break;
+  }
   //printf ("system call!\n");
   //thread_exit ();
   //
