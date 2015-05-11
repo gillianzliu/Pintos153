@@ -61,13 +61,13 @@ process_execute (const char *file_name)
   if (thread_name == NULL)
     return TID_ERROR;
 
-  strlcpy(thread_name, file_name, 16);
-  thread_name = strtok_r(thread_name, " ", &saveptr);
+  strlcpy(thread_name, file_name, PGSIZE);
+  //thread_name = strtok_r(thread_name, " ", &saveptr);
 
-  if (saveptr != NULL)
-  {
-    *(saveptr - 1) = ' ';
-  }
+  //if (saveptr != NULL)
+  //{
+  //  *(saveptr - 1) = ' ';
+  //}
 
   exec.file_name = file_name;
 
@@ -93,6 +93,8 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
+  //FIXME WHAT IS BEING PASSED IN IS NOT A CHAR *, IT IS AN EXEC_HELPER *
+  //THIS IS PROBABLY WHY THERE IS AN ERROR WHEN TRYING FREE_PAGE
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
