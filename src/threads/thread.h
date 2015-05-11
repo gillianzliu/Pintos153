@@ -105,7 +105,7 @@ struct thread
 
     /* ADD CHILDREN LIST */
     struct list children;
-    struct list_elem children_elem; 
+    struct list_elem child_elem; 
     
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

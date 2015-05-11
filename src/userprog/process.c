@@ -24,8 +24,9 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 //FIXME ADDED STRUCT TO HELP START PROCESS
 struct exec_helper
 {
-  const char *file_name; //entire command line
-  //add semaphore for loading
+  const char *file_name; 		//entire command line
+  struct semaphore *loading_sema; 	//add semaphore for loading
+  struct thread *child;
   //add stuff that is needed to transfer between processes and children
 };
 
@@ -42,8 +43,7 @@ process_execute (const char *file_name)
   tid_t tid;
   char *saveptr;
 
-  //FIXME SET file_name in exec_helper
-  //init(&(exec.semaphore));
+  init(&(exec.loading_sema));
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -68,11 +68,17 @@ process_execute (const char *file_name)
   tid = thread_create (thread_name, PRI_DEFAULT, start_process, &exec);
   if (tid != TID_ERROR)
   {
-    //sema_down(&(exec.semaphore));
-    //list_pushback(thread_current()->children_list, tid?);
+    sema_down(&(exec.loading_sema));
+    if (exec.success)
+    {
+      list_pushback(&thread_current()->children, exec.child, 
+                    exec.child->child_elem);
+    }
+    else 
+      tid = TID_ERROR;
   }
-  else
-    palloc_free_page (fn_copy); 
+  //else
+  //  palloc_free_page (thread_name); //idk if right
   return tid;
 }
 
@@ -91,7 +97,6 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
-  //FIXME THE &if_.esp what is it, it should be the arguments passed in
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -256,9 +261,9 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
-  //FIXME
+  //FIXME CHEZCK IF file_name is too large
   file_name = strtok_r(cmd_line, ' ', saveptr);
-  camd_line = saveptr;
+  cmd_line = saveptr;
 
   /* Open executable file. */
   file = filesys_open (file_name);
@@ -497,18 +502,33 @@ setup_stack_helper(char *cmd_line, uint8_t *kpage, uint8_t *upage, void **esp)
   size_t ofs = PGSIZE;
   char * const null = NULL;
   char *saveptr;
-  //char ** argv;
-  //int argc;
+  char ** argv;
+  int argc = 0;
   //MAYBE MORE STUFF
  //for loop end when NULL
-  argv[argc] = strtok_r(cmd_line, ' ', saveptr);
-  argc++;
+  do
+  {
+    argv[argc] = strtok_r(cmd_line, ' ', saveptr);
+    argc++;
+  }
+  while (saveptr != NULL);
+
+  argv[argc] = NULL;
+  
 
 //for loop decrement argc FIXME CHECK IF ANY PUSH RETURNS NULL
-  push(kpage, &upage, argv[argc], length(argv[argc]) + 1);
+  for (; argc >= 0; argc--)
+  {
+    if (!push(kpage, &upage, argv[argc], length(argv[argc]) + 1))
+    {
+      return false;
+    }
+  }
 
-  push(NULL);
-  
+  if (!push(NULL))
+  {
+    return false;
+  }
 //for loop same as above
   push(kpage, &upage, &argv[argc], size_of (CHAR *));
 
