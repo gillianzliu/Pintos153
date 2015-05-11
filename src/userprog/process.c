@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -25,8 +26,9 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 struct exec_helper
 {
   const char *file_name; 		//entire command line
-  struct semaphore *loading_sema; 	//add semaphore for loading
+  struct semaphore loading; 		//add semaphore for loading
   struct thread *child;
+  bool success;
   //add stuff that is needed to transfer between processes and children
 };
 
@@ -38,12 +40,12 @@ tid_t
 process_execute (const char *file_name) 
 {
   struct exec_helper exec;
-  char thread_name[16];
+  char *thread_name;
   //char *fn_copy;
   tid_t tid;
   char *saveptr;
 
-  init(&(exec.loading_sema));
+  sema_init(&exec.loading, 0);
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -55,7 +57,8 @@ process_execute (const char *file_name)
   //FIXME PARSE SO THAT file_name is just the first command, no parameters
   //fn_copy should contain all parameters
 
-  strlcpy(thread_name, strtok_r(file_name, ' ', saveptr), 16);
+  strlcpy(thread_name, file_name, 16);
+  thread_name = strtok_r(thread_name, " ", &saveptr);
 
   if (saveptr != NULL)
   {
@@ -68,11 +71,10 @@ process_execute (const char *file_name)
   tid = thread_create (thread_name, PRI_DEFAULT, start_process, &exec);
   if (tid != TID_ERROR)
   {
-    sema_down(&(exec.loading_sema));
+    sema_down(&(exec.loading));
     if (exec.success)
     {
-      list_pushback(&thread_current()->children, exec.child, 
-                    exec.child->child_elem);
+      list_push_back(&thread_current()->children, &(exec.child)->child_elem);
     }
     else 
       tid = TID_ERROR;
@@ -233,11 +235,16 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-static bool setup_stack (void **esp);
+static bool setup_stack (void **esp, const char * cmd_line);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
                           bool writable);
+static void * push (uint8_t *kpage, size_t *ofs, const void *buf,
+                    size_t size); 
+static bool setup_stack_helper(const char *cmd_line, uint8_t *kpage, 
+                               uint8_t *upage, void **esp);
+
 
 /* Loads an ELF executable from FILE_NAME into the current thread.
    Stores the executable's entry point into *EIP
@@ -262,8 +269,8 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
   process_activate ();
 
   //FIXME CHEZCK IF file_name is too large
-  file_name = strtok_r(cmd_line, ' ', saveptr);
-  cmd_line = saveptr;
+  strlcpy(file_name, cmd_line, sizeof file_name);
+  strlcpy(file_name, strtok_r(file_name, " ", &saveptr), sizeof file_name);
 
   /* Open executable file. */
   file = filesys_open (file_name);
@@ -475,7 +482,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
-setup_stack (void **esp, char *cmd_line) 
+setup_stack (void **esp, const char *cmd_line) 
 {
   //FIXME FUNCTION TO INITIALIZE ARGUMENTS IN STACK
   //PROBABLY NEEDS ANOTHER PARAMETER FOR ARGUMENTS: just added cmd_line
@@ -488,8 +495,8 @@ setup_stack (void **esp, char *cmd_line)
       uint8_t *upage = ((uint8_t*) PHYS_BASE) - PGSIZE;
       success = install_page (upage, kpage, true);
       if (success)
-        //*esp = PHYS_BASE; //FIXME LOOP TO ADD ARGUMENTS TO STACK IN REVERSE ORDER
-        success = setup_stack_helper(cmd_line, kpage, upage, esp);
+        *esp = PHYS_BASE - 12; 
+        //success = setup_stack_helper(cmd_line, kpage, upage, esp);
       else
         palloc_free_page (kpage);
     }
@@ -497,44 +504,59 @@ setup_stack (void **esp, char *cmd_line)
 }
 
 static bool
-setup_stack_helper(char *cmd_line, uint8_t *kpage, uint8_t *upage, void **esp)
+setup_stack_helper(const char *cmd_line, uint8_t *kpage, uint8_t *upage, void **esp)
 {
   size_t ofs = PGSIZE;
   char * const null = NULL;
   char *saveptr;
   char ** argv;
   int argc = 0;
+  int i;
+  char* cmd_line_cpy;
+
+  strlcpy(cmd_line_cpy, cmd_line, strlen(cmd_line) + 1);
   //MAYBE MORE STUFF
  //for loop end when NULL
   do
   {
-    argv[argc] = strtok_r(cmd_line, ' ', saveptr);
+    argv[argc] = strtok_r(cmd_line_cpy, " ", &saveptr);
     argc++;
   }
   while (saveptr != NULL);
 
-  argv[argc] = NULL;
+  argc--;
+  if (argv[argc] == NULL)
+  {
+    argc--;
+  }
   
 
 //for loop decrement argc FIXME CHECK IF ANY PUSH RETURNS NULL
-  for (; argc >= 0; argc--)
+  for (i = argc; i >= 0; i--)
   {
-    if (!push(kpage, &upage, argv[argc], length(argv[argc]) + 1))
+    if (push(kpage, &ofs, argv[argc], strlen(argv[argc]) + 1) == NULL)
     {
       return false;
     }
   }
 
-  if (!push(NULL))
+  if (push(kpage, &ofs, &null, sizeof NULL) == NULL)
   {
     return false;
   }
 //for loop same as above
-  push(kpage, &upage, &argv[argc], size_of (CHAR *));
+  for (i = argc; i <= 0; i--)
+  {
+    if (push(kpage, &ofs, &argv[argc], sizeof &argv[argc]) == NULL)
+      return false;
+  }
 
-  push(argc);
-
-  push(&null);
+  if (push(kpage, &ofs, &argv, sizeof argv) == NULL)
+    return false;
+  if (push(kpage, &ofs, &argc, sizeof argc) == NULL)
+    return false;
+  if (push(kpage, &ofs, &null, sizeof null) == NULL)
+    return false;
 
   //use push(), push token and then a NULL
   //if any push() returns false, return false
@@ -545,6 +567,26 @@ setup_stack_helper(char *cmd_line, uint8_t *kpage, uint8_t *upage, void **esp)
   *esp = upage + ofs;
 
   return true;
+}
+
+/* Pushes bytes onto kpage's stack and then adjusts
+ * the relative stack pointer *ofs. On sucess, 
+ * returns pointer to newly pushed object, on fail
+ * returns NULL pointer */
+static void *
+push (uint8_t *kpage, size_t *ofs, const void *buf, size_t size)
+{
+  size_t padsize = ROUND_UP (size, sizeof (uint32_t));
+
+  if (*ofs < padsize)
+  {
+    return NULL;
+  }
+  
+  *ofs -= padsize;
+
+  memcpy (kpage + *ofs + (padsize - size), buf, size);
+  return kpage + *ofs + (padsize - size);
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel

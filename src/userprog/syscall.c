@@ -3,8 +3,13 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/vaddr.h"
+#include "threads/palloc.h"
+#include "userprog/pagedir.h"
 
 static void syscall_handler (struct intr_frame *);
+static void copy_in(void *dst_, const void *usrc_, size_t size);
+static inline bool get_user (uint8_t *dst, const uint8_t *usrc);
 
 void
 syscall_init (void) 
@@ -17,6 +22,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 {
   //FIXME CHECK TO SEE IF POINTER IS VALID
   //THEN GET SYSCALL NUMBER 
+  /*
   unsigned callNum;
   int args[3];
   int numOfArgs;
@@ -39,13 +45,17 @@ syscall_handler (struct intr_frame *f UNUSED)
   //thread_exit ();
   //
   f->eax = desired_sys_call_fun(args[0], args[1], args[2]);
+  */
+  printf ("system call!\n");
+  thread_exit ();
+
 }
 
 static void
 copy_in (void *dst_, const void *usrc_, size_t size)
 {
   uint8_t *dst = dst_;
-  const unit8_t *usrc = usrc_;
+  const uint8_t *usrc = usrc_;
 
   for (; size > 0; size--, dst++, usrc++)
   {
