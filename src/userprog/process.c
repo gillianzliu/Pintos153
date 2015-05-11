@@ -57,6 +57,10 @@ process_execute (const char *file_name)
   //FIXME PARSE SO THAT file_name is just the first command, no parameters
   //fn_copy should contain all parameters
 
+  thread_name = palloc_get_page(0);
+  if (thread_name == NULL)
+    return TID_ERROR;
+
   strlcpy(thread_name, file_name, 16);
   thread_name = strtok_r(thread_name, " ", &saveptr);
 
@@ -254,7 +258,7 @@ bool
 load (const char *cmd_line, void (**eip) (void), void **esp) 
 {
   struct thread *t = thread_current ();
-  char file_name[NAME_MAX + 2];           //DIFFERENT THAN BEFORE
+  char *file_name;           //DIFFERENT THAN BEFORE
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
   off_t file_ofs;
@@ -268,8 +272,12 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
+  file_name = palloc_get_page(0);
+  if (file_name == NULL)
+    return TID_ERROR;
+
   //FIXME CHEZCK IF file_name is too large
-  strlcpy(file_name, cmd_line, sizeof file_name);
+  strlcpy(file_name, cmd_line, 16);
   strlcpy(file_name, strtok_r(file_name, " ", &saveptr), sizeof file_name);
 
   /* Open executable file. */
@@ -513,6 +521,10 @@ setup_stack_helper(const char *cmd_line, uint8_t *kpage, uint8_t *upage, void **
   int argc = 0;
   int i;
   char* cmd_line_cpy;
+
+  cmd_line_cpy = palloc_get_page(0);
+  if (thread_name == NULL)
+    return TID_ERROR;
 
   strlcpy(cmd_line_cpy, cmd_line, strlen(cmd_line) + 1);
   //MAYBE MORE STUFF
