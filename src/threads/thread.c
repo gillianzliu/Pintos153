@@ -269,6 +269,8 @@ thread_unblock (struct thread *t)
   ASSERT (t->status == THREAD_BLOCKED);
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
+
+  thread_yield_priority(NULL);
   
   intr_set_level (old_level);
 }
@@ -757,6 +759,26 @@ thread_mlfqs_yield()
   }
 }
 
+void 
+thread_yield_priority(void)
+{
+  enum intr_level old_level = intr_disable();
+
+  if (!list_empty(&ready_list) && thread_current() != idle_thread)
+  {
+    struct thread *max_rdy_thd = list_entry (list_max(&ready_list,
+         cmp_priority, NULL), struct thread, elem);
+    if (thread_get_effective_priority(max_rdy_thd, 8) > thread_get_priority())
+    {
+      if (intr_context())
+      {
+        intr_yield_on_return();
+      }
+      else
+        thread_yield();
+    }
+  }
+}
 
 
 

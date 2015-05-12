@@ -40,7 +40,8 @@ tid_t
 process_execute (const char *file_name) 
 {
   struct exec_helper exec;
-  char *thread_name;
+  char thread_name[NAME_MAX + 2];
+  int i = 0;
   //char *fn_copy;
   tid_t tid;
   char *saveptr;
@@ -57,19 +58,17 @@ process_execute (const char *file_name)
   //FIXME PARSE SO THAT file_name is just the first command, no parameters
   //fn_copy should contain all parameters
 
-  thread_name = palloc_get_page(0);
-  if (thread_name == NULL)
-    return TID_ERROR;
+  strlcpy(thread_name, file_name, sizeof thread_name);
+  /*while (i < 16 && thread_name[i] != ' ')
+  {
+    ++i;
+  }
 
-  strlcpy(thread_name, file_name, PGSIZE);
-  //thread_name = strtok_r(thread_name, " ", &saveptr);
+  thread_name[i] = '\0';
 
-  //if (saveptr != NULL)
-  //{
-  //  *(saveptr - 1) = ' ';
-  //}
+  exec.file_name = file_name;*/
 
-  exec.file_name = file_name;
+  strtok_r(thread_name, " ", &saveptr);
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (thread_name, PRI_DEFAULT, start_process, &exec);
@@ -83,8 +82,8 @@ process_execute (const char *file_name)
     else 
       tid = TID_ERROR;
   }
-  //else
-  //  palloc_free_page (thread_name); //idk if right
+  else
+    palloc_free_page (thread_name); //idk if right
   return tid;
 }
 
@@ -93,9 +92,9 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
-  //FIXME WHAT IS BEING PASSED IN IS NOT A CHAR *, IT IS AN EXEC_HELPER *
-  //THIS IS PROBABLY WHY THERE IS AN ERROR WHEN TRYING FREE_PAGE
-  char *file_name = file_name_;
+  struct exec_helper *exec = file_name_;
+  //char *filename = exec->file_name
+
   struct intr_frame if_;
   bool success;
 
@@ -104,10 +103,10 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (exec->file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
+  //palloc_free_page (file_name);
   if (!success) 
     thread_exit ();
 
@@ -260,7 +259,7 @@ bool
 load (const char *cmd_line, void (**eip) (void), void **esp) 
 {
   struct thread *t = thread_current ();
-  char *file_name;           //DIFFERENT THAN BEFORE
+  char file_name[NAME_MAX + 2];           //DIFFERENT THAN BEFORE
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
   off_t file_ofs;
@@ -274,13 +273,13 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
-  file_name = palloc_get_page(0);
-  if (file_name == NULL)
-    return TID_ERROR;
+  //file_name = palloc_get_page(0);
+  //if (file_name == NULL)
+  //  return TID_ERROR;
 
   //FIXME CHEZCK IF file_name is too large
-  strlcpy(file_name, cmd_line, 16);
-  strlcpy(file_name, strtok_r(file_name, " ", &saveptr), sizeof file_name);
+  //strlcpy(file_name, cmd_line, sizeof file_name);
+  //strlcpy(file_name, strtok_r(file_name, " ", &saveptr), sizeof file_name);
 
   /* Open executable file. */
   file = filesys_open (file_name);
@@ -290,9 +289,10 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
       goto done; 
     }
 
-  thread_current()->bin = file;            //ADDED FOR PROCESS_EXIT
-
   //DISABLE 'file' WRITE 
+  file_deny_write(file);
+
+  thread_current()->bin = file;            //ADDED FOR PROCESS_EXIT
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
