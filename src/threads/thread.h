@@ -160,4 +160,6 @@ void update_recent_cpu(struct thread *t, void *aux);
 void update_priority(struct thread *t, void *aux);
 void update_recent_priority(struct thread *t, void *aux);
 
+void thread_yield_priority(void);
+
 #endif /* threads/thread.h */

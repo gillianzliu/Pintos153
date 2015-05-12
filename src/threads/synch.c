@@ -144,7 +144,7 @@ sema_up (struct semaphore *sema)
   sema->value++;
   intr_set_level (old_level);
   //FIXME THIS IS EVIDENCE THAT UNBLOCK NEEDS THREAD YIELD
-  thread_yield();
+  //thread_yield();
 }
 
 static void sema_test_helper (void *sema_);
