@@ -765,7 +765,7 @@ thread_yield_priority(void)
 {
   enum intr_level old_level = intr_disable();
 
-  if (!list_empty(&ready_list) && thread_current() != idle_thread)
+  if (!list_empty(&ready_list))
   {
     struct thread *max_rdy_thd = list_entry (list_max(&ready_list,
          cmp_priority, NULL), struct thread, elem);
