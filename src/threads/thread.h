@@ -85,6 +85,7 @@ struct wait_status
   int exit_status;
   tid_t tid;
   struct semaphore *make_wait;
+  struct list_elem child_elem;
 };
 
 struct thread

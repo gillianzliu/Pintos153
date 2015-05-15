@@ -17,13 +17,14 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
 
 struct exec_helper
 {
   bool success;
   struct wait_status * child;
   char * cmd_line;
-  struct semaphore *loading;
+  struct semaphore loading;
 };
 
 static thread_func start_process NO_RETURN;
@@ -36,20 +37,39 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy;
+  struct exec_helper exec;
+  char thread_name[NAME_MAX + 2];
+  char *saveptr;
+  //char *fn_copy;
   tid_t tid;
 
+  sema_init(&exec.loading, 0);
+
+  exec.cmd_line = file_name;
+
+  strlcpy(thread_name, file_name, sizeof thread_name);
+  strtok_r(thread_name, " ", &saveptr);
+
   /* Make a copy of FILE_NAME.
-     Otherwise there's a race between the caller and load(). */
+     Otherwise there's a race between the caller and load(). 
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+  strlcpy (fn_copy, file_name, PGSIZE); */
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+  tid = thread_create (thread_name, PRI_DEFAULT, start_process, &exec);
+  if (tid != TID_ERROR)
+  {
+    sema_down(&exec.loading);
+    if (exec.success)
+    {
+      //list_push_back(&thread_current()->children, 
+      //                &exec.child->child_elem);
+    }
+    else
+      tid = TID_ERROR;
+  }
   return tid;
 }
 
@@ -58,7 +78,8 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
-  char *file_name = file_name_;
+  struct exec_helper * exec = file_name_;
+  char *file_name = exec->cmd_line;
   struct intr_frame if_;
   bool success;
 
@@ -69,8 +90,21 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
 
+  if (success)
+  {
+    thread_current()->wait_stat = malloc (sizeof *exec->child);
+    exec->child = thread_current()->wait_stat;
+
+    sema_init(&exec->child->make_wait, 0);
+    exec->child->tid = thread_current()->tid;
+    
+    printf("Hurrah, load is success\n");
+  }
+
   /* If load failed, quit. */
-  palloc_free_page (file_name);
+  //palloc_free_page (file_name);
+  exec->success = success;
+  sema_up(&exec->loading);
   if (!success) 
     thread_exit ();
 
@@ -452,6 +486,16 @@ setup_stack (void **esp)
   return success;
 }
 
+static bool 
+set_up_stack_helper (const char * cmd_line, void **esp)
+{
+  char **argv = NULL;
+  char *token;
+  char *saveptr;
+  int argc = 0;  
+  int argv_size = 10;
+}
+
 /* Adds a mapping from user virtual address UPAGE to kernel
    virtual address KPAGE to the page table.
    If WRITABLE is true, the user process may modify the page;
@@ -470,4 +514,16 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+static void *
+push (uint8_t *kpage, size_t *ofs, const void *buf, size_t size)
+{
+  size_t padsize = ROUND_UP (size, sizeof (uint32_t));
+  if (*ofs < padsize)
+    return NULL;
+
+  *ofs -= padsize;
+  memcpy (kpage + *ofs + (padsize - size), buf, size);
+  return kpage + *ofs + (padsize -size);
 }

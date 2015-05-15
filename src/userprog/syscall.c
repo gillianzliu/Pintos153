@@ -161,6 +161,7 @@ int
 sys_read (int fd, const void *buffer, unsigned size)
 {
   //implement later
+  thread_exit();
   return -1;
 }
 
