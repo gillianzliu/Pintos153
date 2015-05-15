@@ -18,17 +18,20 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/synch.h"
+#include "threads/malloc.h"
 
 struct exec_helper
 {
   bool success;
   struct wait_status * child;
-  char * cmd_line;
+  const char * cmd_line;
   struct semaphore loading;
 };
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static void *push (uint8_t *kpage, size_t *ofs, const void *buf, size_t size);
+
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -79,7 +82,6 @@ static void
 start_process (void *file_name_)
 {
   struct exec_helper * exec = file_name_;
-  char *file_name = exec->cmd_line;
   struct intr_frame if_;
   bool success;
 
@@ -88,7 +90,7 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (exec->cmd_line, &if_.eip, &if_.esp);
 
   if (success)
   {
@@ -487,13 +489,60 @@ setup_stack (void **esp)
 }
 
 static bool 
-set_up_stack_helper (const char * cmd_line, void **esp)
+set_up_stack_helper (const char * cmd_line, uint8_t *kpage, 
+                      uint8_t *upage, void **esp)
 {
   char **argv = NULL;
-  char *token;
   char *saveptr;
+  char * const null = NULL;
+  size_t ofs = PGSIZE;
   int argc = 0;  
   int argv_size = 10;
+  int i;
+
+  char *cmd_line_cpy = push(kpage, &ofs, cmd_line, strlen(cmd_line) + 1);
+
+  if (cmd_line_cpy == NULL)
+    return false;
+
+  argv = malloc (argv_size * sizeof (char*));
+
+  char *token = strtok_r(cmd_line_cpy, " ", &saveptr);
+
+  for (; token != NULL; token = strtok_r(cmd_line_cpy, " ", &saveptr))
+  {
+    if (argc >= argv_size)
+    {
+      argv_size *= 2;
+      argv = realloc(argv, argv_size * sizeof(char *));
+    }
+    argv[argc] = token;
+    argc++;
+  }
+
+  if (push(kpage, &ofs, &null, sizeof null) == NULL)
+  {
+    return false;
+  }
+
+  i = argc - 1;
+
+  for (; i >= 0; i--)
+  {
+    if (push (kpage, &ofs, &argv[i], sizeof argv[i]))
+      return false;
+  }
+
+  if (push(kpage, &ofs, &argv, sizeof argv) == NULL)
+    return false;
+  else if (push(kpage, &ofs, &argc, sizeof argc) == NULL)
+    return false;
+  else if (push(kpage, &ofs, &null, sizeof null) == NULL)
+    return false;
+
+  *esp = upage + ofs;
+  return true;
+  
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel
