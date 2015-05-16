@@ -6,6 +6,10 @@
 #include "threads/vaddr.h"
 #include "devices/shutdown.h"
 #include "userprog/process.h"
+#include "userprog/pagedir.h"
+#include "threads/malloc.h"
+#include "filesys/filesys.h"
+#include "filesys/file.h"
 
 static void syscall_handler (struct intr_frame *);
 static void copy_in (void *dst_, const void *usrc_, size_t size);
@@ -32,6 +36,7 @@ struct file_descriptor
 };
 
 struct file_descriptor * find_fd (int fd);
+bool cmp_fd(const struct list_elem *a, const struct list_elem *b, void* aux);
 
 void
 syscall_init (void) 
@@ -59,6 +64,8 @@ syscall_handler (struct intr_frame *f UNUSED)
   copy_in (args, (uint32_t *) f->esp + 1, sizeof *args * numOfArgs);
 
   printf ("System call %i with %i args!\n", callNum, numOfArgs);
+
+  thread_exit();
 
   switch(callNum)
   {
@@ -113,7 +120,7 @@ void
 sys_exit(int status)
 {
   thread_current()->wait_stat->exit_status = status;
-  thread_exit();
+  thread_exit();     //possibly needs to be process_exit
   NOT_REACHED();
 }
 
@@ -146,8 +153,35 @@ sys_remove (const char *file)
 int
 sys_open (const char *file)
 {
-  //implement
-  return false;
+  int fd_slot = 2;
+  struct list_elem *e = list_begin(&thread_current()->fds);
+  for (; e != list_end(&thread_current()->fds); e = list_next(e))
+  {
+    struct file_descriptor *temp = list_entry(e, 
+         struct file_descriptor, fd_elem); 
+    if (temp->fd_num < fd_slot)
+    {
+      continue;
+    }
+    else if (temp->fd_num == fd_slot)
+    {
+      fd_slot++;
+    }
+    else
+      break;
+  }
+
+  struct file *open_file = filesys_open(file);
+  if (open_file == NULL)
+    return -1;
+
+  struct file_descriptor *new = malloc(sizeof *new);
+  new->fd_num = fd_slot;
+  new->file = open_file;
+
+  list_insert_ordered(&thread_current()->fds, &new->fd_elem, cmp_fd, NULL);
+   
+  return new->fd_num;
 }
 
 int
@@ -161,7 +195,7 @@ int
 sys_read (int fd, const void *buffer, unsigned size)
 {
   //implement later
-  thread_exit();
+  //thread_exit();
   return -1;
 }
 
@@ -225,8 +259,8 @@ verify_user (const void *uaddr)
 struct file_descriptor *
 find_fd (int fd)
 {
-  struct list_elem * e = list_begin(&thread_current()->fd_list);
-  while (e != list_end(&thread_current()->fd_list))
+  struct list_elem * e = list_begin(&thread_current()->fds);
+  while (e != list_end(&thread_current()->fds))
   {
     struct file_descriptor *f = list_entry(e, struct file_descriptor, fd_elem);
     if (f->fd_num == fd)
@@ -236,3 +270,13 @@ find_fd (int fd)
   }
   return NULL;
 }
+
+bool 
+cmp_fd(const struct list_elem *a, const struct list_elem *b, void* aux)
+{
+  struct file_descriptor *p = list_entry(a, struct file_descriptor, fd_elem);
+  struct file_descriptor *t = list_entry(b, struct file_descriptor, fd_elem);
+ 
+  return p->fd_num < t->fd_num;
+}
+

@@ -113,7 +113,10 @@ struct thread
     struct list_elem donor_elem;
 
     /* For fd's */
-    struct list fd_list;
+    struct list fds;
+
+    /* For bin file on exit */
+    struct file *bin;
 
     /* Children List */
     struct list children;

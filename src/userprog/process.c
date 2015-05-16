@@ -67,8 +67,8 @@ process_execute (const char *file_name)
     sema_down(&exec.loading);
     if (exec.success)
     {
-      //list_push_back(&thread_current()->children, 
-      //                &exec.child->child_elem);
+      list_push_back(&thread_current()->children, 
+                      &exec.child->child_elem);
     }
     else
       tid = TID_ERROR;
@@ -99,14 +99,13 @@ start_process (void *file_name_)
 
     sema_init(&exec->child->make_wait, 0);
     exec->child->tid = thread_current()->tid;
-    
-    printf("Hurrah, load is success\n");
   }
 
   /* If load failed, quit. */
   //palloc_free_page (file_name);
   exec->success = success;
   sema_up(&exec->loading);
+
   if (!success) 
     thread_exit ();
 
@@ -239,25 +238,30 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-static bool setup_stack (void **esp);
+static bool setup_stack (const char *cmd_line, void **esp);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
                           bool writable);
+static bool setup_stack_helper (const char * cmd_line, uint8_t *kpage, 
+                      uint8_t *upage, void **esp);
 
 /* Loads an ELF executable from FILE_NAME into the current thread.
    Stores the executable's entry point into *EIP
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (const char *file_name, void (**eip) (void), void **esp) 
+load (const char *cmd_line, void (**eip) (void), void **esp) 
 {
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
+  char file_name_[NAME_MAX + 2];
+  char *file_name;
   off_t file_ofs;
   bool success = false;
   int i;
+  char *saveptr;
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
@@ -266,6 +270,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
+  strlcpy(file_name_, cmd_line, sizeof file_name_);
+  file_name = strtok_r(file_name_, " ", &saveptr);
+
+  printf("File Name trying to open: %s\n", file_name);
+
   file = filesys_open (file_name);
   if (file == NULL) 
     {
@@ -346,7 +355,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp))
+  if (!setup_stack (cmd_line, esp))
     goto done;
 
   /* Start address. */
@@ -471,7 +480,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
-setup_stack (void **esp) 
+setup_stack (const char *cmd_line, void **esp) 
 {
   uint8_t *kpage;
   bool success = false;
@@ -479,9 +488,13 @@ setup_stack (void **esp)
   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   if (kpage != NULL) 
     {
-      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
+      uint8_t upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
+      success = install_page (upage, kpage, true);
       if (success)
+      {
         *esp = PHYS_BASE - 12;
+        success = setup_stack_helper(cmd_line, kpage, upage, esp);
+      }
       else
         palloc_free_page (kpage);
     }
@@ -489,7 +502,7 @@ setup_stack (void **esp)
 }
 
 static bool 
-set_up_stack_helper (const char * cmd_line, uint8_t *kpage, 
+setup_stack_helper (const char * cmd_line, uint8_t *kpage, 
                       uint8_t *upage, void **esp)
 {
   char **argv = NULL;
@@ -505,11 +518,14 @@ set_up_stack_helper (const char * cmd_line, uint8_t *kpage,
   if (cmd_line_cpy == NULL)
     return false;
 
+  if (push(kpage, &ofs, &null, sizeof null) == NULL)
+    return false;
+
   argv = malloc (argv_size * sizeof (char*));
 
   char *token = strtok_r(cmd_line_cpy, " ", &saveptr);
 
-  for (; token != NULL; token = strtok_r(cmd_line_cpy, " ", &saveptr))
+  for (; token != NULL; token = strtok_r(NULL, " ", &saveptr))
   {
     if (argc >= argv_size)
     {
