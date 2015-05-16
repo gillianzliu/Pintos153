@@ -273,8 +273,6 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
   strlcpy(file_name_, cmd_line, sizeof file_name_);
   file_name = strtok_r(file_name_, " ", &saveptr);
 
-  printf("File Name trying to open: %s\n", file_name);
-
   file = filesys_open (file_name);
   if (file == NULL) 
     {
@@ -365,7 +363,7 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
+  //file_close (file);
   return success;
 }
 
@@ -545,7 +543,7 @@ setup_stack_helper (const char * cmd_line, uint8_t *kpage,
 
   for (; i >= 0; i--)
   {
-    if (push (kpage, &ofs, &argv[i], sizeof argv[i]))
+    if (push (kpage, &ofs, &argv[i], sizeof argv[i]) == NULL)
       return false;
   }
 
@@ -558,7 +556,6 @@ setup_stack_helper (const char * cmd_line, uint8_t *kpage,
 
   *esp = upage + ofs;
   return true;
-  
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel

@@ -65,8 +65,6 @@ syscall_handler (struct intr_frame *f UNUSED)
 
   printf ("System call %i with %i args!\n", callNum, numOfArgs);
 
-  thread_exit();
-
   switch(callNum)
   {
     case SYS_HALT:
