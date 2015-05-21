@@ -4,12 +4,14 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
 #include "devices/shutdown.h"
 #include "userprog/process.h"
 #include "userprog/pagedir.h"
 #include "threads/malloc.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "lib/string.h"
 
 static void syscall_handler (struct intr_frame *);
 static void copy_in (void *dst_, const void *usrc_, size_t size);
@@ -38,15 +40,21 @@ struct file_descriptor
 struct file_descriptor * find_fd (int fd);
 bool cmp_fd(const struct list_elem *a, const struct list_elem *b, void* aux);
 
+struct semaphore file_access;
+
 void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+
+  sema_init(&file_access, 1);
 }
 
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
+  //printf ("System call\n"); // %i with %i args!\n", callNum, numOfArgs);
+
   if (!verify_user(f->esp))
     sys_exit(-1);
 
@@ -64,9 +72,14 @@ syscall_handler (struct intr_frame *f UNUSED)
   else if (callNum == SYS_READ || callNum == SYS_WRITE)
     numOfArgs = 3;
 
-  copy_in (args, (uint32_t *) f->esp + 1, sizeof *args * numOfArgs);
+  int i = 1;
+  for (; i <= 3; ++i)
+  {
+    if (!verify_user((int **)f->esp + i))
+      sys_exit(-1);
+  }
 
-  //printf ("System call %i with %i args!\n", callNum, numOfArgs);
+  copy_in (args, (uint32_t *) f->esp + 1, sizeof *args * numOfArgs);
 
   switch(callNum)
   {
@@ -75,7 +88,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_EXIT:
       sys_exit(args[0]);
-      thread_exit();
+      break;
     case SYS_EXEC:
       f->eax = sys_exec(args[0]);
       break;
@@ -127,8 +140,11 @@ sys_exit(int status)
 }
 
 pid_t
-sys_exec(const char*cmd_line)
+sys_exec(const char *cmd_line)
 {
+  if (cmd_line == NULL || !verify_user(cmd_line))
+    sys_exit(-1);
+
   return process_execute(cmd_line);
 }
 
@@ -141,36 +157,49 @@ sys_wait (pid_t pid)
 bool
 sys_create (const char *file, unsigned initial_size)
 {
-  //implement later
-  return false;
+  if (file == NULL || !verify_user(file))
+    sys_exit(-1);
+
+  printf("File Name: %s\n", file);
+
+  return filesys_create(file, initial_size);
 }
 
 bool
 sys_remove (const char *file)
 {
-  //implement later
-  return false;
+  if (!verify_user(file))
+    sys_exit(-1);
+
+  return filesys_remove(file);
 }
 
 int
 sys_open (const char *file)
 {
+  if (file == NULL || !verify_user(file))
+    sys_exit(-1);
+
   int fd_slot = 2;
-  struct list_elem *e = list_begin(&thread_current()->fds);
-  for (; e != list_end(&thread_current()->fds); e = list_next(e))
+
+  if (!list_empty(&thread_current()->fds))
   {
-    struct file_descriptor *temp = list_entry(e, 
-         struct file_descriptor, fd_elem); 
-    if (temp->fd_num < fd_slot)
+    struct list_elem *e = list_begin(&thread_current()->fds);
+    for (; e != list_end(&thread_current()->fds); e = list_next(e))
     {
-      continue;
+      struct file_descriptor *temp = list_entry(e, 
+           struct file_descriptor, fd_elem); 
+      if (temp->fd_num < fd_slot)
+      {
+        continue;
+      }
+      else if (temp->fd_num == fd_slot)
+      {
+        fd_slot++;
+      }
+      else
+        break;
     }
-    else if (temp->fd_num == fd_slot)
-    {
-      fd_slot++;
-    }
-    else
-      break;
   }
 
   struct file *open_file = filesys_open(file);
@@ -189,8 +218,13 @@ sys_open (const char *file)
 int
 sys_filesize (int fd)
 {
-  //implement later
-  return -1;
+  struct file_descriptor *fd_size = find_fd(fd);
+  if (fd_size != NULL && !verify_user(fd_size->file))
+    sys_exit(-1);
+  else if (fd_size == NULL)
+    return -1; //DONT KNOW ABOUT THIS FIXME CHECK SPECS
+  
+  return file_length(fd_size->file);
 }
 
 int
@@ -206,10 +240,14 @@ sys_read (int fd, const void *buffer, unsigned size)
     strlcat(buffer, input_getc(), 1);
     read_size = 1;
   }
+  else if (fd == STDOUT_FILENO)
+  {
+    sys_exit(-1);
+  }
   else
   {
     struct file_descriptor *fd_read = find_fd(fd);
-    if (fd == NULL)
+    if (fd_read == NULL)
       return -1;
     
     read_size = file_read(fd_read->file, buffer, size);
@@ -230,6 +268,10 @@ sys_write (int fd, const void *buffer, unsigned size)
   {
     putbuf(buffer, size);
     return size;
+  }
+  else if (fd == STDIN_FILENO)
+  {
+    sys_exit(-1);
   }
 
   struct file_descriptor *fd_write = find_fd(fd);
@@ -257,8 +299,14 @@ sys_tell (int fd)
 void
 sys_close (int fd)
 {
-  //implement later
-  return;
+  struct file_descriptor *fd_close = find_fd(fd);
+  if (fd_close == NULL)
+    return;
+
+  file_close(fd_close->file);
+  list_remove(&fd_close->fd_elem);
+
+  free(fd_close);
 }
 
 static void 
@@ -286,6 +334,9 @@ get_user (uint8_t *dst, const uint8_t *usrc)
 static bool
 verify_user (const void *uaddr)
 {
+  if (uaddr == NULL)
+    return false;
+
   return (uaddr < PHYS_BASE && pagedir_get_page(thread_current()->pagedir, uaddr) != NULL);
 }
 
