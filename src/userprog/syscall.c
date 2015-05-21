@@ -47,6 +47,9 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
+  if (!verify_user(f->esp))
+    sys_exit(-1);
+
   unsigned callNum;
   int args[3];
   int numOfArgs;
@@ -63,7 +66,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 
   copy_in (args, (uint32_t *) f->esp + 1, sizeof *args * numOfArgs);
 
-  printf ("System call %i with %i args!\n", callNum, numOfArgs);
+  //printf ("System call %i with %i args!\n", callNum, numOfArgs);
 
   switch(callNum)
   {
@@ -117,6 +120,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 void
 sys_exit(int status)
 {
+  printf("%s: exit(%i)\n", thread_current()->name, status);
   thread_current()->wait_stat->exit_status = status;
   thread_exit();     //possibly needs to be process_exit
   NOT_REACHED();
@@ -192,16 +196,47 @@ sys_filesize (int fd)
 int
 sys_read (int fd, const void *buffer, unsigned size)
 {
-  //implement later
-  //thread_exit();
-  return -1;
+  if (!verify_user(buffer))
+    sys_exit(-1);
+
+  int read_size = 0;
+
+  if (fd == STDIN_FILENO)
+  {
+    strlcat(buffer, input_getc(), 1);
+    read_size = 1;
+  }
+  else
+  {
+    struct file_descriptor *fd_read = find_fd(fd);
+    if (fd == NULL)
+      return -1;
+    
+    read_size = file_read(fd_read->file, buffer, size);
+  }
+
+  return read_size;
 }
 
 int
 sys_write (int fd, const void *buffer, unsigned size)
 {
-  //implement later
-  return -1;
+  int write_size = 0;
+  
+  if (!verify_user(buffer) || !verify_user(buffer + size))
+    sys_exit(-1);
+
+  if (fd == STDOUT_FILENO)
+  {
+    putbuf(buffer, size);
+    return size;
+  }
+
+  struct file_descriptor *fd_write = find_fd(fd);
+  if (fd_write == NULL)
+    return -1;
+
+  return file_write(fd_write->file, buffer, size);
 }
 
 void

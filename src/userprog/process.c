@@ -525,26 +525,23 @@ setup_stack_helper (const char * cmd_line, uint8_t *kpage,
 
   for (; token != NULL; token = strtok_r(NULL, " ", &saveptr))
   {
-    if (argc >= argv_size)
-    {
-      argv_size *= 2;
-      argv = realloc(argv, argv_size * sizeof(char *));
-    }
-    argv[argc] = token;
-    argc++;
-  }
+    void *uarg = upage + (token - (char *) kpage);
+    if (push(kpage, &ofs, &uarg, sizeof uarg) == NULL)
+      return false;
 
-  if (push(kpage, &ofs, &null, sizeof null) == NULL)
-  {
-    return false;
+    argc++;
   }
 
   i = argc - 1;
 
-  for (; i >= 0; i--)
+  argv = (char **) (upage + ofs);
+  char **temp_args = (char **) (kpage + ofs);
+
+  for (; i > (argc - 1)/2; i--)
   {
-    if (push (kpage, &ofs, &argv[i], sizeof argv[i]) == NULL)
-      return false;
+    char *temp = temp_args[i];
+    temp_args[i] = temp_args[(argc - 1) - i];
+    temp_args[(argc - 1) - i] = temp;
   }
 
   if (push(kpage, &ofs, &argv, sizeof argv) == NULL)
