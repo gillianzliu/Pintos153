@@ -34,13 +34,6 @@ void sys_seek(int fd, unsigned position);
 unsigned sys_tell(int fd);
 void sys_close(int fd);
 
-struct file_descriptor
-{
-  struct list_elem fd_elem;
-  struct file *file;
-  int fd_num;
-};
-
 struct file_descriptor * find_fd (int fd);
 bool cmp_fd(const struct list_elem *a, const struct list_elem *b, void* aux);
 

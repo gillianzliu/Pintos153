@@ -169,6 +169,23 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+  /* Close all open files */
+  if (!list_empty(&thread_current()->fds))
+  {
+    struct list_elem *e = list_begin(&thread_current()->fds);
+    while (e != list_end(&thread_current()->fds))
+    {
+      struct file_descriptor *fd = list_entry(e, struct file_descriptor, fd_elem);
+      file_close(fd->file);
+
+      struct list_elem *temp = list_next(e);
+      list_remove(e);
+      e = temp;
+    }
+  }
+
+  file_close(thread_current()->bin);
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -297,50 +314,19 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
-  /* Open executable file. */
-  //temp_cmd_line = cmd_line;
-  //while (temp_cmd_line[0] == ' ')
-  //{
-  //  temp_cmd_line++;
-  //}
-
-  /* char *space = strchr(cmd_line, ' ');
-  
-  if ((space - cmd_line) - 1 > NAME_MAX)
-    space = NAME_MAX + 1;
-
-  file_name = malloc(NAME_MAX + 1);
-  strlcpy(file_name, cmd_line, space); */
-
-  //strlcpy(file_name_, cmd_line, sizeof file_name_);
-  //file_name = strtok_r(file_name_, " ", &saveptr);
   strlcpy(file_name, cmd_line, sizeof file_name);
   strtok_r(file_name, " ", &saveptr);
 
-  //file_name = thread_current()->name;
-
-  //printf("File Name: %s\n", file_name);
-
-  /*
-  if (strcmp(file_name, "sc-bad-arg") == 0 || strcmp(file_name, "bad-read2") == 0
-      || strcmp(file_name, "bad-write2") == 0 || strcmp(file_name, "bad-jump") == 0
-      || strcmp(file_name, "bad-jump2") == 0 || strcmp(file_name, "multi-oom") == 0)
-  {
-    sys_exit(-1);
-  }
-  */
-
   file = filesys_open (file_name);
-  //file = filesys_open (cmd_line);
   thread_current()->bin = file;
-
-  file_deny_write(file);
 
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
+
+  file_deny_write(file);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr

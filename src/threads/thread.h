@@ -89,6 +89,13 @@ struct wait_status
   struct list_elem child_elem;
 };
 
+struct file_descriptor
+{
+  struct list_elem fd_elem;
+  struct file *file;
+  int fd_num;
+};
+
 struct thread
   {
     /* Owned by thread.c. */
