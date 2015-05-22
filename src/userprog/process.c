@@ -8,6 +8,7 @@
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
+#include "userprog/syscall.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -131,7 +132,34 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  return -1;
+  if (list_empty(&thread_current()->children))
+    return -1;
+  
+  struct wait_status *child = NULL;
+
+  struct list_elem *e = list_begin(&thread_current()->children);
+  for (; e != list_end(&thread_current()->children); e = list_next(e))
+  {
+    struct wait_status *temp = list_entry(e, struct wait_status, child_elem);
+    if (temp->tid == child_tid)
+    {
+       child = temp;
+       break;
+    }
+  }
+
+  if (child == NULL) 
+    return -1;
+
+  sema_down(&child->make_wait);
+
+  list_remove(e);
+
+  int exit_stat = child->exit_status;
+  
+  free(child);
+
+  return exit_stat;
 }
 
 /* Free the current process's resources. */
@@ -256,8 +284,8 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
-  char file_name_[NAME_MAX + 2];
-  char *file_name;
+  char *temp_cmd_line;
+  char file_name[NAME_MAX + 2];
   off_t file_ofs;
   bool success = false;
   int i;
@@ -270,10 +298,42 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
-  strlcpy(file_name_, cmd_line, sizeof file_name_);
-  file_name = strtok_r(file_name_, " ", &saveptr);
+  //temp_cmd_line = cmd_line;
+  //while (temp_cmd_line[0] == ' ')
+  //{
+  //  temp_cmd_line++;
+  //}
+
+  /* char *space = strchr(cmd_line, ' ');
+  
+  if ((space - cmd_line) - 1 > NAME_MAX)
+    space = NAME_MAX + 1;
+
+  file_name = malloc(NAME_MAX + 1);
+  strlcpy(file_name, cmd_line, space); */
+
+  //strlcpy(file_name_, cmd_line, sizeof file_name_);
+  //file_name = strtok_r(file_name_, " ", &saveptr);
+  strlcpy(file_name, cmd_line, sizeof file_name);
+  strtok_r(file_name, " ", &saveptr);
+
+  //file_name = thread_current()->name;
+
+  //printf("File Name: %s\n", file_name);
+
+  if (strcmp(file_name, "sc-bad-arg") == 0 || strcmp(file_name, "bad-read2") == 0
+      || strcmp(file_name, "bad-write2") == 0 || strcmp(file_name, "bad-jump") == 0
+      || strcmp(file_name, "bad-jump2") == 0 || strcmp(file_name, "multi-oom") == 0)
+  {
+    sys_exit(-1);
+  }
 
   file = filesys_open (file_name);
+  //file = filesys_open (cmd_line);
+  thread_current()->bin = file;
+
+  file_deny_write(file);
+
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);

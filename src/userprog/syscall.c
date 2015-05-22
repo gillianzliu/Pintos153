@@ -9,12 +9,14 @@
 #include "userprog/process.h"
 #include "userprog/pagedir.h"
 #include "threads/malloc.h"
+#include "threads/palloc.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "lib/string.h"
 
 static void syscall_handler (struct intr_frame *);
 static void copy_in (void *dst_, const void *usrc_, size_t size);
+static char* copy_in_string (const char *us);
 static inline bool get_user (uint8_t *dst, const uint8_t *usrc);
 static bool verify_user (const void *uadder);
 void sys_exit(int status);
@@ -53,8 +55,6 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
-  //printf ("System call\n"); // %i with %i args!\n", callNum, numOfArgs);
-
   if (!verify_user(f->esp))
     sys_exit(-1);
 
@@ -63,6 +63,8 @@ syscall_handler (struct intr_frame *f UNUSED)
   int numOfArgs;
 
   copy_in (&callNum, f->esp, sizeof callNum);
+
+  //printf ("System call %i\n", callNum);// with %i args!\n", callNum, numOfArgs);
 
   numOfArgs = 1;		//JUST FOR TESTING HAVE TO CHANGE
   if (callNum == SYS_HALT)
@@ -73,9 +75,9 @@ syscall_handler (struct intr_frame *f UNUSED)
     numOfArgs = 3;
 
   int i = 1;
-  for (; i <= 3; ++i)
+  for (; i <= numOfArgs; ++i)
   {
-    if (!verify_user((int **)f->esp + i))
+    if (!verify_user(f->esp + i))
       sys_exit(-1);
   }
 
@@ -135,6 +137,7 @@ sys_exit(int status)
 {
   printf("%s: exit(%i)\n", thread_current()->name, status);
   thread_current()->wait_stat->exit_status = status;
+  sema_up(&thread_current()->wait_stat->make_wait);
   thread_exit();     //possibly needs to be process_exit
   NOT_REACHED();
 }
@@ -145,7 +148,13 @@ sys_exec(const char *cmd_line)
   if (cmd_line == NULL || !verify_user(cmd_line))
     sys_exit(-1);
 
-  return process_execute(cmd_line);
+  char* kernel_cmd_line = copy_in_string(cmd_line);
+
+  sema_down(&file_access);
+  pid_t pid = process_execute(kernel_cmd_line);
+  sema_up(&file_access);
+
+  return pid;
 }
 
 int
@@ -160,9 +169,13 @@ sys_create (const char *file, unsigned initial_size)
   if (file == NULL || !verify_user(file))
     sys_exit(-1);
 
-  printf("File Name: %s\n", file);
+  bool pass;
 
-  return filesys_create(file, initial_size);
+  sema_down(&file_access);
+  pass = filesys_create(file, initial_size);
+  sema_up(&file_access);
+
+  return pass;
 }
 
 bool
@@ -171,7 +184,11 @@ sys_remove (const char *file)
   if (!verify_user(file))
     sys_exit(-1);
 
-  return filesys_remove(file);
+  sema_down(&file_access);
+  bool pass = filesys_remove(file);
+  sema_up(&file_access);
+
+  return pass;
 }
 
 int
@@ -202,7 +219,10 @@ sys_open (const char *file)
     }
   }
 
+  sema_down(&file_access);
   struct file *open_file = filesys_open(file);
+  sema_up(&file_access);
+
   if (open_file == NULL)
     return -1;
 
@@ -219,12 +239,16 @@ int
 sys_filesize (int fd)
 {
   struct file_descriptor *fd_size = find_fd(fd);
-  if (fd_size != NULL && !verify_user(fd_size->file))
-    sys_exit(-1);
-  else if (fd_size == NULL)
-    return -1; //DONT KNOW ABOUT THIS FIXME CHECK SPECS
+  //if (fd_size != NULL && !verify_user(fd_size->file))
+  //  sys_exit(-1);
+  //else if (fd_size == NULL)
+  //  return -1; //DONT KNOW ABOUT THIS FIXME CHECK SPECS
   
-  return file_length(fd_size->file);
+  sema_up(&file_access);
+  int size = file_length(fd_size->file);
+  sema_down(&file_access);
+
+  return size;
 }
 
 int
@@ -250,7 +274,9 @@ sys_read (int fd, const void *buffer, unsigned size)
     if (fd_read == NULL)
       return -1;
     
+    sema_down(&file_access);
     read_size = file_read(fd_read->file, buffer, size);
+    sema_up(&file_access);
   }
 
   return read_size;
@@ -278,7 +304,11 @@ sys_write (int fd, const void *buffer, unsigned size)
   if (fd_write == NULL)
     return -1;
 
-  return file_write(fd_write->file, buffer, size);
+  sema_down(&file_access);
+  write_size = file_write(fd_write->file, buffer, size);
+  sema_up(&file_access);
+
+  return write_size;
 }
 
 void
@@ -303,7 +333,10 @@ sys_close (int fd)
   if (fd_close == NULL)
     return;
 
+  sema_down(&file_access);
   file_close(fd_close->file);
+  sema_up(&file_access);
+
   list_remove(&fd_close->fd_elem);
 
   free(fd_close);
@@ -320,6 +353,32 @@ copy_in (void *dst_, const void *usrc_, size_t size)
     if (usrc >= (uint8_t *) PHYS_BASE || !get_user(dst, usrc))
       thread_exit();
   }
+}
+
+static char* 
+copy_in_string (const char *us)
+{
+  char *ks;
+  size_t length;
+  
+  ks = palloc_get_page(0);
+  if (ks == NULL)
+    thread_exit();
+
+  for (length = 0; length < PGSIZE; length++)
+  {
+    if (us >= (char *) PHYS_BASE || !get_user (ks + length, us++))
+    {
+      palloc_free_page(ks);
+      thread_exit();
+    }
+  
+    if (ks[length] == '\0')
+      return ks;
+  }
+  
+  ks[PGSIZE - 1] = '\0';
+  return ks;
 }
 
 static inline bool 
@@ -364,3 +423,23 @@ cmp_fd(const struct list_elem *a, const struct list_elem *b, void* aux)
   return p->fd_num < t->fd_num;
 }
 
+static void*
+get_buffer(struct intr_frame *f, int i)
+{
+  intptr_t* buffer = (intptr_t*)f->esp + i;
+  if (!verify_user(buffer))
+    sys_exit(-1);
+
+  buffer = pagedir_get_page(thread_current()->pagedir, buffer);
+  if (buffer == NULL)
+    thread_exit();
+
+  if (!verify_user(*buffer))
+    thread_exit();
+
+  buffer = pagedir_get_page(thread_current()->pagedir, buffer);
+
+  return buffer;
+}
+  
+  
