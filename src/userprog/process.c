@@ -321,12 +321,14 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
 
   //printf("File Name: %s\n", file_name);
 
+  /*
   if (strcmp(file_name, "sc-bad-arg") == 0 || strcmp(file_name, "bad-read2") == 0
       || strcmp(file_name, "bad-write2") == 0 || strcmp(file_name, "bad-jump") == 0
       || strcmp(file_name, "bad-jump2") == 0 || strcmp(file_name, "multi-oom") == 0)
   {
     sys_exit(-1);
   }
+  */
 
   file = filesys_open (file_name);
   //file = filesys_open (cmd_line);

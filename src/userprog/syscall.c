@@ -19,6 +19,8 @@ static void copy_in (void *dst_, const void *usrc_, size_t size);
 static char* copy_in_string (const char *us);
 static inline bool get_user (uint8_t *dst, const uint8_t *usrc);
 static bool verify_user (const void *uadder);
+static bool verify_buffer(void *buffer, unsigned size);
+
 void sys_exit(int status);
 pid_t sys_exec( const char * cmd_line);
 int sys_wait ( pid_t pid);
@@ -72,12 +74,14 @@ syscall_handler (struct intr_frame *f UNUSED)
   else if (callNum == SYS_CREATE || callNum == SYS_SEEK)
     numOfArgs = 2;
   else if (callNum == SYS_READ || callNum == SYS_WRITE)
+  {
     numOfArgs = 3;
+  }
 
   int i = 1;
   for (; i <= numOfArgs; ++i)
   {
-    if (!verify_user(f->esp + i))
+    if (!verify_user((int *)f->esp + i))
       sys_exit(-1);
   }
 
@@ -239,10 +243,6 @@ int
 sys_filesize (int fd)
 {
   struct file_descriptor *fd_size = find_fd(fd);
-  //if (fd_size != NULL && !verify_user(fd_size->file))
-  //  sys_exit(-1);
-  //else if (fd_size == NULL)
-  //  return -1; //DONT KNOW ABOUT THIS FIXME CHECK SPECS
   
   sema_up(&file_access);
   int size = file_length(fd_size->file);
@@ -254,7 +254,7 @@ sys_filesize (int fd)
 int
 sys_read (int fd, const void *buffer, unsigned size)
 {
-  if (!verify_user(buffer))
+  if (!verify_buffer(buffer, size))
     sys_exit(-1);
 
   int read_size = 0;
@@ -287,7 +287,7 @@ sys_write (int fd, const void *buffer, unsigned size)
 {
   int write_size = 0;
   
-  if (!verify_user(buffer) || !verify_user(buffer + size))
+  if (!verify_user(buffer) || !verify_buffer(buffer, size))
     sys_exit(-1);
 
   if (fd == STDOUT_FILENO)
@@ -351,7 +351,7 @@ copy_in (void *dst_, const void *usrc_, size_t size)
   for (; size > 0; size--, dst++, usrc++)
   {
     if (usrc >= (uint8_t *) PHYS_BASE || !get_user(dst, usrc))
-      thread_exit();
+      sys_exit(-1);
   }
 }
 
@@ -363,14 +363,14 @@ copy_in_string (const char *us)
   
   ks = palloc_get_page(0);
   if (ks == NULL)
-    thread_exit();
+    sys_exit(-1);
 
   for (length = 0; length < PGSIZE; length++)
   {
     if (us >= (char *) PHYS_BASE || !get_user (ks + length, us++))
     {
       palloc_free_page(ks);
-      thread_exit();
+      sys_exit(-1);
     }
   
     if (ks[length] == '\0')
@@ -423,23 +423,16 @@ cmp_fd(const struct list_elem *a, const struct list_elem *b, void* aux)
   return p->fd_num < t->fd_num;
 }
 
-static void*
-get_buffer(struct intr_frame *f, int i)
+static bool
+verify_buffer(void *buffer, unsigned size)
 {
-  intptr_t* buffer = (intptr_t*)f->esp + i;
-  if (!verify_user(buffer))
-    sys_exit(-1);
-
-  buffer = pagedir_get_page(thread_current()->pagedir, buffer);
-  if (buffer == NULL)
-    thread_exit();
-
-  if (!verify_user(*buffer))
-    thread_exit();
-
-  buffer = pagedir_get_page(thread_current()->pagedir, buffer);
-
-  return buffer;
+  int i = 0;
+  for (; i < size; i++)
+  {
+    if (!verify_user(buffer + i))
+      return false;
+  }
+  return true;
 }
   
   
