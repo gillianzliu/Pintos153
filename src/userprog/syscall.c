@@ -53,6 +53,12 @@ syscall_handler (struct intr_frame *f UNUSED)
   if (!verify_user(f->esp))
     sys_exit(-1);
 
+  if (!verify_user((int *)f->esp + 1) || !verify_user((int *)f->esp + 2)
+      || !verify_user((int *)f->esp + 3))
+  {
+    sys_exit(-1);
+  }
+
   unsigned callNum;
   int args[3];
   int numOfArgs;
@@ -74,9 +80,14 @@ syscall_handler (struct intr_frame *f UNUSED)
   int i = 1;
   for (; i <= numOfArgs; ++i)
   {
-    if (!verify_user((int *)f->esp + i))
+    if (!verify_user(f->esp + i))
       sys_exit(-1);
   }
+  /* if (numOfArgs == 3)
+  {
+    if (!verify_buffer((uint32_t *) f->esp + 2, (int *) f->esp + 3));
+      sys_exit(-1);
+  } */
 
   copy_in (args, (uint32_t *) f->esp + 1, sizeof *args * numOfArgs);
 
@@ -343,7 +354,7 @@ copy_in (void *dst_, const void *usrc_, size_t size)
 
   for (; size > 0; size--, dst++, usrc++)
   {
-    if (usrc >= (uint8_t *) PHYS_BASE || !get_user(dst, usrc))
+    if (!verify_user(usrc) || !get_user(dst, usrc))
       sys_exit(-1);
   }
 }
@@ -360,7 +371,7 @@ copy_in_string (const char *us)
 
   for (length = 0; length < PGSIZE; length++)
   {
-    if (us >= (char *) PHYS_BASE || !get_user (ks + length, us++))
+    if (!verify_user(us) || !get_user (ks + length, us++))
     {
       palloc_free_page(ks);
       sys_exit(-1);
