@@ -400,7 +400,8 @@ verify_user (const void *uaddr)
   if (uaddr == NULL)
     return false;
 
-  return (uaddr < PHYS_BASE && pagedir_get_page(thread_current()->pagedir, uaddr) != NULL);
+  return (uaddr < PHYS_BASE && 
+          pagedir_get_page(thread_current()->pagedir, uaddr) != NULL);
 }
 
 struct file_descriptor *
